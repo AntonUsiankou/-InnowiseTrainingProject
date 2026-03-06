@@ -1,11 +1,12 @@
 name: CI Pipeline
+
 on:
   workflow_dispatch:
   pull_request:
   push:
     branches:
       - master
-      - windows-desktop
+      - user-service-CI-pipeline
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -14,11 +15,11 @@ jobs:
       postgres-test:
         image: postgres:15
         env:
-          POSTGRES_DB: InnowiseTraineeProject
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
         ports:
-          - 5432:5432
+          - "5432:5432"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -28,7 +29,7 @@ jobs:
       redis:
         image: redis:7-alpine
         ports:
-          - 6379:6379
+          - "6379:6379"
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -37,11 +38,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Microsoft OpenJDK 21
+      - name: Set up Microsoft OpenJDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -49,7 +50,7 @@ jobs:
           cache: maven
 
       - name: Cache Maven dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
@@ -57,17 +58,11 @@ jobs:
 
       - name: Build with Maven
         run: mvn clean compile
-        env:
-          DB_URL: jdbc:postgresql://localhost:5432/InnowiseTraineeProject
-          DB_USERNAME: postgres
-          DB_PASSWORD: postgres
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
 
       - name: Run tests
         run: mvn test
         env:
-          DB_URL: jdbc:postgresql://localhost:5433/testdb
+          DB_URL: jdbc:postgresql://localhost:5432/testdb
           DB_USERNAME: test
           DB_PASSWORD: test
           REDIS_HOST: localhost
@@ -81,7 +76,6 @@ jobs:
           name: test-results
           path: target/surefire-reports/
 
-      #Code analise
       - name: SonarQube Analysis
         run: mvn sonar:sonar -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} -Dsonar.login=${{ secrets.SONAR_TOKEN }}
         env:
@@ -90,16 +84,9 @@ jobs:
       - name: Package application
         run: mvn package -DskipTests
 
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-results
-          path: target/surefire-reports/
-
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: target/site/jacoco/
@@ -107,11 +94,11 @@ jobs:
   docker-build:
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/windows-desktop')
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Microsoft OpenJDK 21
         uses: actions/setup-java@v4
@@ -124,16 +111,16 @@ jobs:
         run: mvn clean package -DskipTests
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to DockerHub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
