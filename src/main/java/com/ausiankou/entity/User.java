@@ -25,21 +25,36 @@ public class User extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false,
+            length = 100)
     private String name;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false,
+            length = 100)
     private String surname;
 
-    @Column(name = "birth_date", nullable = false)
+    @Column(name = "birth_date",
+            nullable = false)
     private LocalDate birthDate;
 
-    @Column(nullable = false, unique = true, length = 255)
+    @Column(nullable = false,
+            unique = true,
+            length = 255)
     private String email;
 
     @Column(nullable = false)
     private Boolean active = true;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "user",
+            cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE},
+            fetch = FetchType.LAZY,
+            orphanRemoval = true)
     private List<PaymentCard> paymentCards = new ArrayList<>();
+    public void addPaymentCard(PaymentCard card){
+        if(paymentCards.size()>=5){
+            throw new IllegalStateException("Пользователь не должен иметь больше 5 карт");
+        }
+        paymentCards.add(card);
+        card.setUser(this);
+    }
 }
