@@ -15,6 +15,12 @@ import com.ausiankou.repository.specifiactions.UserSpecification;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -32,20 +38,27 @@ public class UserService {
     private final PaymentCardRepository cardRepository;
     private final UserMapper userMapper;
     private final PaymentCardMapper cardMapper;
+    private final CacheManager cacheManager;
 
     @Autowired
     public UserService(UserRepository userRepository,
                        PaymentCardRepository cardRepository,
                        UserMapper userMapper,
-                       PaymentCardMapper cardMapper){
+                       PaymentCardMapper cardMapper,
+                       CacheManager cacheManager){
         this.userRepository = userRepository;
         this.cardRepository = cardRepository;
         this.userMapper = userMapper;
         this.cardMapper = cardMapper;
+        this.cacheManager = cacheManager;
     }
 
     //CREATE
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "users", allEntries = true),
+            @CacheEvict(value = "userCards", allEntries = true)
+    })
     public UserDto createUser(UserCreateDto createDto){
         if(userRepository.findByEmail(createDto.getEmail()).isPresent()){
             throw new CustomExceptions.DuplicateResourceException(
@@ -57,6 +70,10 @@ public class UserService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "userCards", key = "#userId"),
+            @CacheEvict(value = "cards", allEntries = true)
+    })
     public PaymentCardDto createCard(Long userId, PaymentCardDto cardDto){
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
@@ -78,18 +95,21 @@ public class UserService {
     }
 
     //GET_BY_ID
+    @Cacheable(value = "users", key = "#id")
     public UserDto getUserById(Long id){
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
                         "Пользователь", "id", id));
         return userMapper.toDto(user);
     }
+    @Cacheable(value = "cards", key = "#id")
     public PaymentCardDto getCardById(Long id){
         PaymentCard card = cardRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
                         "Пользователь", "id", id));
         return cardMapper.toDto(card);
     }
+    @Cacheable(value = "userCards", key = "#userId")
     public List<PaymentCardDto> getCardsByUserId(Long userId) {
         if(!userRepository.existsById(userId)){
             throw new CustomExceptions.ResourceNotFoundException(
@@ -122,6 +142,15 @@ public class UserService {
 
     //UPDATE
     @Transactional
+    @Caching(
+            put = {
+                    @CachePut(value = "users", key = "#result.id")
+            },
+            evict = {
+                    @CacheEvict(value = "userCards", key = "#id"),
+                    @CacheEvict(value = "cards", allEntries = true)
+            }
+    )
     public UserDto updateUser(Long id, UserDto userDto) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
@@ -139,6 +168,15 @@ public class UserService {
     }
 
     @Transactional
+    @Caching(
+            put = {
+                    @CachePut(value = "cards", key = "#result.id")
+            },
+            evict = {
+                    @CacheEvict(value = "userCards", key = "#result.userId"),
+                    @CacheEvict(value = "users", key = "#result.userId")
+            }
+    )
     public PaymentCardDto updateCard(Long id, PaymentCardDto cardDto) {
         PaymentCard card = cardRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
@@ -157,13 +195,19 @@ public class UserService {
 
     //isActive
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "users", key = "#id"),
+            @CacheEvict(value = "userCards", key = "#id"),
+            @CacheEvict(value = "cards", allEntries = true)
+    })
     public void activateUser(Long id){
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
                         "Пользователи", "id", id));
         if (user.getActive()) {
             log.warn("Пользователь {} уже активен", id);
-            return;
+            throw new CustomExceptions.BusinessRuleException(
+                    "ALREADY_ACTIVE", String.format("Пользователь с id %d уже активен", id));
         }
         user.setActive(true);
         userRepository.save(user);
@@ -171,13 +215,19 @@ public class UserService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "users", key = "#id"),
+            @CacheEvict(value = "userCards", key = "#id"),
+            @CacheEvict(value = "cards", allEntries = true)
+    })
     public void deactivateUser(Long id){
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
                         "Пользователи", "id", id));
         if(!user.getActive()){
             log.warn("Пользователь {} уже не активен", id);
-            return;
+            throw new CustomExceptions.BusinessRuleException(
+                    "ALREADY_INACTIVE", String.format("Польщователь с id %d уже активен", id));
         }
         user.setActive(false);
         userRepository.save(user);
@@ -186,13 +236,19 @@ public class UserService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "users", key = "#id"),
+            @CacheEvict(value = "userCards", key = "#id"),
+            @CacheEvict(value = "cards", allEntries = true)
+    })
     public void activateCard(Long id) {
         PaymentCard card = cardRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
                         "Карта", "id", id));
         if(card.getActive()){
             log.warn("Карта {} уже активна", id);
-            return;
+            throw new CustomExceptions.BusinessRuleException(
+                    "ALREADY_ACTIVE", String.format("Карта с id %d уже активен", id));
         }
         card.setActive(true);
         cardRepository.save(card);
@@ -200,13 +256,19 @@ public class UserService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "users", key = "#id"),
+            @CacheEvict(value = "userCards", key = "#id"),
+            @CacheEvict(value = "cards", allEntries = true)
+    })
     public void deactivateCard(Long id) {
         PaymentCard card = cardRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException(
                         "Карта", "id", id));
         if (!card.getActive()) {
             log.warn("Карта {} уже не активна", id);
-            return;
+            throw new CustomExceptions.BusinessRuleException(
+                    "ALREADY_INACTIVE", String.format("Карта с id %d уже активен", id));
         }
         card.setActive(false);
         cardRepository.save(card);
@@ -214,6 +276,11 @@ public class UserService {
     }
     //Delete
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "users", key = "#id"),
+            @CacheEvict(value = "userCards", key = "#id"),
+            @CacheEvict(value = "cards", allEntries = true)
+    })
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                         .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException("Пользователи", "id", id));
@@ -221,6 +288,11 @@ public class UserService {
         log.info("Удаление пользователя и всех его карт: {}", id);
     }
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "users", key = "#id"),
+            @CacheEvict(value = "userCards", key = "#id"),
+            @CacheEvict(value = "cards", allEntries = true)
+    })
     public void deleteCard(Long id){
         PaymentCard card = cardRepository.findById(id)
                 .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException("Карта", "id", id));
@@ -237,6 +309,7 @@ public class UserService {
         return userMapper.toDtoList(users);
     }
 
+    @Cacheable(value = "userDetails", key = "#id")
     public UserDto getUserDetailsWithCards(Long id) {
         UserDto userDto = getUserById(id);
         List<PaymentCard> cards = cardRepository.findByUserIdAndActiveTrue(id);
@@ -244,6 +317,7 @@ public class UserService {
         userDto.setPaymentCards(cardDtos);
         return userDto;
     }
+
     // JPQL
     public List<Object[]> getUsersWithCardCount(Boolean active) {
         if (active == null) {
@@ -254,5 +328,16 @@ public class UserService {
             throw new CustomExceptions.ResourceNotFoundException("Отчет", "статусу", active);
         }
         return results;
+    }
+    public void clearAllCaches(){
+        log.info("Очистка всех кешей");
+        cacheManager.getCacheNames().stream()
+                .forEach(cacheName -> {
+                    Cache cache = cacheManager.getCache(cacheName);
+                    if(cache != null){
+                        cache.clear();
+                        log.info("Кеш очищен {}", cacheName);
+                    }
+                });
     }
 }
