@@ -42,6 +42,7 @@ public class User extends BaseEntity {
             length = 255)
     private String email;
 
+    @Builder.Default
     @Column(nullable = false)
     private Boolean active = true;
 
@@ -49,6 +50,7 @@ public class User extends BaseEntity {
             cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE},
             fetch = FetchType.LAZY,
             orphanRemoval = true)
+    @Builder.Default
     private List<PaymentCard> paymentCards = new ArrayList<>();
     public void addPaymentCard(PaymentCard card){
         if(paymentCards.size()>=5){
