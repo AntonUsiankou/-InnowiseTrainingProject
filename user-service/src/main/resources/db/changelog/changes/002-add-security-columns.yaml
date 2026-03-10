@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-security-columns
+      author: user-service
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: users
+                columnName: password
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: password
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: role
+                  type: VARCHAR(20)
+                  defaultValue: "USER"
+                  constraints:
+                    nullable: false
