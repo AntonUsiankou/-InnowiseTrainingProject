@@ -35,3 +35,7 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/changelog-master.yaml
     enabled: true
+  logging:
+    level:
+      com.ausiankou: DEBUG
+      org.springframework.web: INFO
