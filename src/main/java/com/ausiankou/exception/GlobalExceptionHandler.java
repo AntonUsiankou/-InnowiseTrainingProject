@@ -47,6 +47,27 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
+    @ExceptionHandler(CustomExceptions.ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(CustomExceptions.ResourceNotFoundException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.NOT_FOUND.value())
+                .error("Resource Not Found")
+                .build();
+
+        return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(CustomExceptions.DuplicateResourceException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateResource(CustomExceptions.DuplicateResourceException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error("Duplicate Resource")
+                .build();
+
+        return new ResponseEntity<>(response, HttpStatus.CONFLICT);
+    }
 }
 
 @Data
