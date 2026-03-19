@@ -37,11 +37,23 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex) {
+    @ExceptionHandler(CustomExceptions.DuplicateResourceException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateResource(CustomExceptions.DuplicateResourceException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error("Duplicate Resource")
+                .error(ex.getMessage())
+                .build();
+
+        return new ResponseEntity<>(response, HttpStatus.CONFLICT);
+    }
+    @ExceptionHandler(CustomExceptions.BusinessRuleException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessRule(CustomExceptions.BusinessRuleException ex) {
         ErrorResponse response = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.BAD_REQUEST.value())
+                .error("Business Rule Violation")
                 .error(ex.getMessage())
                 .build();
 
@@ -56,17 +68,6 @@ public class GlobalExceptionHandler {
                 .build();
 
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
-    }
-
-    @ExceptionHandler(CustomExceptions.DuplicateResourceException.class)
-    public ResponseEntity<ErrorResponse> handleDuplicateResource(CustomExceptions.DuplicateResourceException ex) {
-        ErrorResponse response = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
-                .status(HttpStatus.CONFLICT.value())
-                .error("Duplicate Resource")
-                .build();
-
-        return new ResponseEntity<>(response, HttpStatus.CONFLICT);
     }
 }
 
