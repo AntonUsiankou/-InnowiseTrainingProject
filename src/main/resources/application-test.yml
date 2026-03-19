@@ -20,8 +20,6 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: 200ms
 
-  cache:
-    type: none
 
   liquibase:
     change-log: classpath:db/changelog/changelog-master.yaml

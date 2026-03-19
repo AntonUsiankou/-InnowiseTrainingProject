@@ -31,7 +31,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class UserServiceUnitTest {
 
-    /*@Mock
+    @Mock
     private UserRepository userRepository;
 
     @Mock
@@ -251,5 +251,5 @@ class UserServiceUnitTest {
         List<UserDto> results = userService.searchByFullName("Иван Петров");
 
         assertThat(results).hasSize(1);
-    }*/
+    }
 }
