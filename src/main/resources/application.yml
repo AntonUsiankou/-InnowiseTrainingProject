@@ -4,6 +4,11 @@ spring:
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+  jackson:
+    serialization:
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
 
   jpa:
     hibernate:
