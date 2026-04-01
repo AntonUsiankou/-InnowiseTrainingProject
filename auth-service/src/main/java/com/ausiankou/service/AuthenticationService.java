@@ -10,6 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+/**
+ * Service interface for authentication operations
+ * Handles user registration, login, token validation, refresh, and logout
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -20,6 +24,13 @@ public class AuthenticationService {
      private final PasswordEncoder passwordEncoder;
      private final RefreshTokenService refreshTokenService;
 
+    /**
+     * Register a new user
+     *
+     * @param request registration request containing user details
+     * @return authentication response with access and refresh tokens
+     * @throws com.ausiankou.exception.CustomExceptions.ConflictException if user already exists
+     */
      @Transactional
      public AuthResponse register(RegistrationRequest request){
          log.info("Попытка регистрации по электронной почте: {}", request.getEmail());
@@ -56,6 +67,13 @@ public class AuthenticationService {
                  .build();
      }
 
+    /**
+     * Authenticate user and generate tokens
+     *
+     * @param request login request with email and password
+     * @return authentication response with access and refresh tokens
+     * @throws com.ausiankou.exception.CustomExceptions.UnauthorizedActionException if credentials are invalid
+     */
      public AuthResponse login(LoginRequest request){
          log.info("Попытка входа в электронную почту: {}", request.getEmail());
 
@@ -95,7 +113,12 @@ public class AuthenticationService {
                  .build();
      }
 
-
+    /**
+     * Validate JWT token for API Gateway
+     *
+     * @param token JWT token to validate
+     * @return validation response with token status and user details if valid
+     */
      public ValidateTokenResponse validateToken(String token){
          log.debug("Валидация токена");
          try {
@@ -154,7 +177,13 @@ public class AuthenticationService {
                      .build();
          }
      }
-
+    /**
+     * Refresh access token using refresh token
+     *
+     * @param request refresh token request
+     * @return new authentication response with fresh tokens
+     * @throws com.ausiankou.exception.CustomExceptions.UnauthorizedActionException if refresh token is invalid
+     */
     public AuthResponse refreshToken(RefreshTokenRequest request) {
         log.info("Попытка обновить рефпешь токен");
 
@@ -193,7 +222,11 @@ public class AuthenticationService {
                 .build();
     }
 
-
+    /**
+     * Logout user by invalidating refresh token
+     *
+     * @param refreshToken refresh token to invalidate
+     */
     public void logout(String refreshToken) {
         refreshTokenService.deleteRefreshToken(refreshToken);
         log.info("Пользоваетль вышел");
