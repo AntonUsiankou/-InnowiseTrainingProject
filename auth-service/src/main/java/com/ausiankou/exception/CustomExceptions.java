@@ -20,4 +20,10 @@ public class CustomExceptions {
             this.fieldValue = fieldValue;
         }
     }
+
+    public static class ConflictException extends RuntimeException {
+        public ConflictException(String message) {
+            super(message);
+        }
+    }
 }
