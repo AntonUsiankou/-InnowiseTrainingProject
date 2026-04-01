@@ -1,17 +1,19 @@
-version: '3.8'
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: auth-redis
+  postgres:
+    image: postgres:15-alpine
+    container_name: auth-postgres
     ports:
-      - "6380:6379"
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: auth
     volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - auth-network
     healthcheck:
-      test: ["CMD","redis-cli","ping"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,17 +28,19 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SERVER_PORT: 8083
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      DATASOURCE_USERNAME: auth
+      DATASOURCE_PASSWORD: auth
       USER_SERVICE_URL: ${USER_SERVICE_URL:-http://host.docker.internal:8082}
       JWT_SECRET: ${JWT_SECRET:-zP8vR2wX5mN9qK1sB4jL7hV0dC3fA6yT9uI1oP4kG7sJ2mN5bV8cX0zQ3wE6rT9}
     depends_on:
-      redis:
+      postgres:
         condition: service_healthy
     networks:
       - auth-network
+
 volumes:
-  redis_data:
+  postgres_data:
 
 networks:
   auth-network:
