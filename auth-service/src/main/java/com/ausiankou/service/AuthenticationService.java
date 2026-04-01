@@ -4,6 +4,7 @@ import com.ausiankou.client.UserServiceClient;
 import com.ausiankou.dto.*;
 import com.ausiankou.exception.CustomExceptions;
 import com.ausiankou.security.JwtService;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,29 +20,69 @@ public class AuthenticationService {
      private final PasswordEncoder passwordEncoder;
      private final RefreshTokenService refreshTokenService;
 
-     public AuthResponse login(LoginRequest request){
-         log.info("Login attempt for email: {}", request.getEmail());
+     @Transactional
+     public AuthResponse register(RegistrationRequest request){
+         log.info("Попытка регистрации по электронной почте: {}", request.getEmail());
+         AuthUserDto existingUser = userServiceClient.getUserByEmail(request.getEmail());
+         if(existingUser != null){
+             log.warn("Пользователь уже существует: ", request.getEmail());
+             throw new CustomExceptions.ConflictException("Пользователь  таким мылом уже существует: " + request.getEmail());
+         }
+         AuthUserDto createdUser = userServiceClient.createUser(request);
 
+         if (createdUser == null || createdUser.getId() == null) {
+             log.error("Ошибка создания пользователя в UserService");
+             throw new RuntimeException("Ошибка создания пользователя");
+         }
+         log.info("Пользователь успешно создан в UserService: {}, id: {}", createdUser.getEmail(), createdUser.getId());
+         String accessToken = jwtService.generateAccessToken(
+                 createdUser.getEmail(),
+                 createdUser.getId(),
+                 createdUser.getRole()
+         );
+         String refreshToken = refreshTokenService.createRefreshToken(
+                 createdUser.getId(),
+                 createdUser.getEmail(),
+                 createdUser.getRole()
+         );
+         log.info("Пользователь зарегистрирован: {}, role: {}", createdUser.getEmail(), createdUser.getRole());
+         return AuthResponse.builder()
+                 .accessToken(accessToken)
+                 .refreshToken(refreshToken)
+                 .tokenType("Bearer")
+                 .expiresIn(900000l)
+                 .email(createdUser.getEmail())
+                 .role(createdUser.getRole())
+                 .build();
+     }
+
+     public AuthResponse login(LoginRequest request){
+         log.info("Попытка входа в электронную почту: {}", request.getEmail());
+
+         boolean isValid = userServiceClient.validateCredentials(request.getEmail(), request.getPassword());
+         if (!isValid) {
+             throw new CustomExceptions.UnauthorizedActionException("Invalid email or password");
+         }
          AuthUserDto user = userServiceClient.getUserByEmail(request.getEmail());
 
          if (user == null) {
-             log.warn("User not found: {}", request.getEmail());
+             log.warn("Пользователь не найден: {}", request.getEmail());
              throw new CustomExceptions.UnauthorizedActionException("Неверный email или пароль");
          }
 
-         if(!passwordEncoder.matches(request.getPassword(), user.getPassword())){
-             log.warn("Invalid password for user: {}", request.getEmail());
+         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+             log.warn("Инвалидный пассворд: {}", request.getEmail());
              throw new CustomExceptions.UnauthorizedActionException("Неверный email или пароль");
          }
 
-         if(!user.getActive()){
-             log.warn("User is deactivated: {}", request.getEmail());
+         if (!user.getActive()) {
+             log.warn("Пользователь не активный: {}", request.getEmail());
              throw new CustomExceptions.UnauthorizedActionException("Пользователь деактивирован");
          }
-         log.info("User authenticated successfully: {}, role: {}", user.getEmail(), user.getRole());
+
+         log.info("Пользователь аутифицирован: {}, роль: {}", user.getEmail(), user.getRole());
 
          String accessToken = jwtService.generateAccessToken(user.getEmail(), user.getId(), user.getRole());
-
          String refreshToken = refreshTokenService.createRefreshToken(user.getId(), user.getEmail(), user.getRole());
 
          return AuthResponse.builder()
@@ -54,20 +95,22 @@ public class AuthenticationService {
                  .build();
      }
 
+
      public ValidateTokenResponse validateToken(String token){
-         log.debug("Validate token");
-         try{
-             if(!jwtService.isTokenValid(token)){
-                 log.warn("Token is invalid");
-                return ValidateTokenResponse.builder()
-                        .valid(false)
-                        .message("Invalid token format or signature")
-                        .build();
+         log.debug("Валидация токена");
+         try {
+             if (!jwtService.isTokenValid(token)) {
+                 log.warn("Токен не валиден");
+                 return ValidateTokenResponse.builder()
+                         .valid(false)
+                         .message("Неверный формат токена или подпись.")
+                         .build();
              }
+
              if (jwtService.isTokenExpired(token)) {
                  return ValidateTokenResponse.builder()
                          .valid(false)
-                         .message("Token has expired")
+                         .message("Срок действия токена истек.")
                          .build();
              }
 
@@ -77,42 +120,43 @@ public class AuthenticationService {
 
              AuthUserDto user = userServiceClient.getUserById(userId);
 
-             if(user == null){
-                 log.warn("User not found for token: {}", userId);
+             if (user == null) {
+                 log.warn("Пользователь не найден для получения токена: {}", userId);
                  return ValidateTokenResponse.builder()
                          .valid(false)
-                         .message("User not found")
-                         .build();
-             }
-             if (!user.getActive()) {
-                 log.warn("User is deactivated: {}", email);
-                 return ValidateTokenResponse.builder()
-                         .valid(false)
-                         .message("User is deactivated")
+                         .message("Пользователь не найден")
                          .build();
              }
 
-             log.info("Token validated successfully for user: {}, role: {}", email, role);
+             if (!user.getActive()) {
+                 log.warn("Пользователь деактивирован: {}", email);
+                 return ValidateTokenResponse.builder()
+                         .valid(false)
+                         .message("Пользователь деактивирован")
+                         .build();
+             }
+
+             log.info("Токен успешно подтвержден для пользователя: {}, роль: {}", email, role);
 
              return ValidateTokenResponse.builder()
                      .valid(true)
                      .userId(userId)
                      .email(email)
                      .role(role)
-                     .message("Token is valid")
+                     .message("Токен валиден")
                      .build();
 
          } catch (Exception e) {
-             log.error("Token validation error: {}", e.getMessage());
+             log.error("Ошибка проверки токена: {}", e.getMessage());
              return ValidateTokenResponse.builder()
                      .valid(false)
-                     .message("Token validation failed: " + e.getMessage())
+                     .message("Проверка токена не удалась: " + e.getMessage())
                      .build();
          }
      }
 
     public AuthResponse refreshToken(RefreshTokenRequest request) {
-        log.info("Refresh token attempt");
+        log.info("Попытка обновить рефпешь токен");
 
         RefreshTokenData tokenData = refreshTokenService.getRefreshTokenData(request.getRefreshToken());
 
@@ -137,7 +181,7 @@ public class AuthenticationService {
         String newAccessToken = jwtService.generateAccessToken(user.getEmail(), user.getId(), user.getRole());
         String newRefreshToken = refreshTokenService.createRefreshToken(user.getId(), user.getEmail(), user.getRole());
 
-        log.info("Tokens refreshed for user: {}", user.getEmail());
+        log.info("Токен обновлен для пользователя: {}", user.getEmail());
 
         return AuthResponse.builder()
                 .accessToken(newAccessToken)
@@ -148,9 +192,11 @@ public class AuthenticationService {
                 .role(user.getRole())
                 .build();
     }
-     public void logout(String refreshToken){
-         refreshTokenService.deleteRefreshToken(refreshToken);
-         log.info("User logged out");
-     }
+
+
+    public void logout(String refreshToken) {
+        refreshTokenService.deleteRefreshToken(refreshToken);
+        log.info("Пользоваетль вышел");
+    }
 
 }

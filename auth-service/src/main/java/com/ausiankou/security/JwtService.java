@@ -59,14 +59,6 @@ public class JwtService {
         return createToken(claims, email, accessExpiration);
     }
 
-    public String generateRefreshToken(String email, Long userId, String role) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId);
-        claims.put("role", role);
-        claims.put("type", "refresh");
-        return createToken(claims, email, refreshExpiration);
-    }
-
     private String createToken(Map<String, Object> claims, String subject, long expiration) {
         return Jwts.builder()
                 .setClaims(claims)
@@ -77,15 +69,6 @@ public class JwtService {
                 .compact();
     }
 
-    public boolean validateToken(String token, String userEmail) {
-        try {
-            String extractedEmail = extractUsername(token);
-            return extractedEmail.equals(userEmail) && !isTokenExpired(token);
-        } catch (Exception e) {
-            log.error("Token validation error: {}", e.getMessage());
-            return false;
-        }
-    }
 
     public boolean isTokenValid(String token) {
         try {
