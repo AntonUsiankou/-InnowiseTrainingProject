@@ -1,13 +1,11 @@
 package com.ausiankou.controller;
 
-import com.ausiankou.dto.AuthResponse;
-import com.ausiankou.dto.LoginRequest;
-import com.ausiankou.dto.RefreshTokenRequest;
-import com.ausiankou.dto.ValidateTokenResponse;
+import com.ausiankou.dto.*;
 import com.ausiankou.service.AuthenticationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,16 +17,23 @@ public class AuthController {
 
     private final AuthenticationService authService;
 
+    @PostMapping("/register")
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegistrationRequest request) {
+        log.info("Registration request for email: {}", request.getEmail());
+        AuthResponse response = authService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request){
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         log.info("Login request for email: {}", request.getEmail());
         return ResponseEntity.ok(authService.login(request));
     }
 
     @PostMapping("/validate")
-    public ResponseEntity<ValidateTokenResponse> validateToken(@RequestHeader("Authorization") String authHeader){
+    public ResponseEntity<ValidateTokenResponse> validateToken(@RequestHeader("Authorization") String authHeader) {
         log.info("Token validation request");
-        if(authHeader == null|| !authHeader.startsWith("Bearer ")){
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.badRequest()
                     .body(ValidateTokenResponse.builder()
                             .valid(false)
@@ -37,7 +42,7 @@ public class AuthController {
         }
 
         String token = authHeader.substring(7);
-        return  ResponseEntity.ok(authService.validateToken(token));
+        return ResponseEntity.ok(authService.validateToken(token));
     }
 
     @PostMapping("/refresh")
