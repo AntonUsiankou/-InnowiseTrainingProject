@@ -15,6 +15,7 @@ import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -42,6 +43,10 @@ public class JwtService {
         return extractClaim(token, claims -> claims.get("role", String.class));
     }
 
+    public String extractJti(String token) {
+        return extractClaim(token, Claims::getId);
+    }
+
     public Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
@@ -63,12 +68,12 @@ public class JwtService {
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(subject)
+                .setId(UUID.randomUUID().toString())
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSignKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
-
 
     public boolean isTokenValid(String token) {
         try {
