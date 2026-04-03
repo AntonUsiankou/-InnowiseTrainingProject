@@ -1,7 +1,7 @@
 package com.ausiankou.controller;
 
 import com.ausiankou.dto.*;
-import com.ausiankou.service.AuthenticationService;
+import com.ausiankou.service.AuthenticationServiceImpl;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 public class AuthController {
 
-    private final AuthenticationService authService;
+    private final AuthenticationServiceImpl authService;
 
     /**
      * Register a new user

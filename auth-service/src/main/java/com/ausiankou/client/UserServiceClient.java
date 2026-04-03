@@ -5,6 +5,7 @@ import com.ausiankou.dto.RegistrationRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -21,7 +22,7 @@ public class UserServiceClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${user.service.url}")
+    @Value("${user.service.url::http://localhost:8082}")
     private String userServiceUrl;
 
     public AuthUserDto getUserByEmail(String email) {
