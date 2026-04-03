@@ -4,6 +4,7 @@ import com.ausiankou.client.UserServiceClient;
 import com.ausiankou.dto.AuthUserDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -13,11 +14,14 @@ import org.springframework.stereotype.Service;
 import java.util.Collections;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final UserServiceClient userServiceClient;
+
+    public CustomUserDetailsService(@Lazy UserServiceClient userServiceClient) {
+        this.userServiceClient = userServiceClient;
+    }
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
