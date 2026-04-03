@@ -17,12 +17,14 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AuthenticationService {
+public class AuthenticationServiceImpl implements IAuthenticationService {
 
     private final UserServiceClient userServiceClient;
-     private final JwtService jwtService;
-     private final PasswordEncoder passwordEncoder;
-     private final RefreshTokenService refreshTokenService;
+    private final JwtService jwtService;
+    private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenService refreshTokenService;
+    private final TokenBlacklistService tokenBlacklistService;
+    private final UserCacheService userCacheService;
 
     /**
      * Register a new user
@@ -136,6 +138,13 @@ public class AuthenticationService {
                          .message("Срок действия токена истек.")
                          .build();
              }
+             if (tokenBlacklistService.isTokenBlacklisted(token)) {
+                 log.warn("Token validation failed - token is blacklisted");
+                 return ValidateTokenResponse.builder()
+                         .valid(false)
+                         .message("Token has been revoked")
+                         .build();
+             }
 
              String email = jwtService.extractUsername(token);
              Long userId = jwtService.extractUserId(token);
@@ -151,11 +160,15 @@ public class AuthenticationService {
                          .build();
              }
 
-             if (!user.getActive()) {
-                 log.warn("Пользователь деактивирован: {}", email);
+             boolean isUserActive = userCacheService.isUserActive(userId);
+
+             if (!isUserActive) {
+                 log.warn("Проверка токена не удалась — пользователь деактивирован: userId={}", userId);
+                 String jti = jwtService.extractJti(token);
+                 tokenBlacklistService.blacklistToken(token, jwtService.extractExpiration(token).getTime() / 1000);
                  return ValidateTokenResponse.builder()
                          .valid(false)
-                         .message("Пользователь деактивирован")
+                         .message("Учетная запись пользователя деактивирована.")
                          .build();
              }
 
@@ -228,8 +241,11 @@ public class AuthenticationService {
      * @param refreshToken refresh token to invalidate
      */
     public void logout(String refreshToken) {
-        refreshTokenService.deleteRefreshToken(refreshToken);
-        log.info("Пользоваетль вышел");
+        RefreshTokenData tokenData = refreshTokenService.getRefreshTokenData(refreshToken);
+        if (tokenData != null) {
+            refreshTokenService.deleteRefreshToken(refreshToken);
+        }
+        log.info("User logged out");
     }
 
 }
