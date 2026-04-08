@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/openjdk/jdk:21-ubuntu
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # Важно: JAR ищется относительно корня контекста (сейчас это корень проекта)
