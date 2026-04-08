@@ -42,11 +42,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Microsoft OpenJDK 21
+      - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'microsoft'
+          distribution: 'temurin'
           cache: maven
 
       - name: Cache Maven dependencies
@@ -100,11 +100,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Microsoft OpenJDK 21
+      - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'microsoft'
+          distribution: 'temurin'
           cache: maven
 
       - name: Build with Maven
