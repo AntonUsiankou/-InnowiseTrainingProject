@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/openjdk/jdk:21-ubuntu
+FROM eclipse-temurin:21-jre-alpine
 LABEL authors="MoJOS"
 WORKDIR /app
 COPY target/auth-service-*.jar app.jar
