@@ -1,31 +1,26 @@
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5433/testdb
-    username: test
-    password: test
-    driver-class-name: org.postgresql.Driver
 
   security:
     enabled: false
-    jpa:
-      hibernate:
-        ddl-auto: create-drop
-      properties:
-        hibernate:
-          dialect: org.hibernate.dialect.PostgreSQLDialect
-          format_sql: true
-      show-sql: true
-
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  cache:
+    type: simple
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      timeout: 200ms
-
+      repositories:
+        enabled: false
+    autoconfigure:
+      exclude:
+        - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+        - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+        - org.springframework.boot.autoconfigure.cache.RedisCacheConfiguration
 
   liquibase:
     change-log: classpath:db/changelog/changelog-master.yaml
-    enabled: true
+    enabled: false
 
 logging:
   level:
