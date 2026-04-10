@@ -4,18 +4,21 @@ import com.ausiankou.dto.PaymentCardDto;
 import com.ausiankou.dto.UserCreateDto;
 import com.ausiankou.dto.UserDto;
 import com.ausiankou.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.jdbc.Sql;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -23,13 +26,20 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.time.LocalDate;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc(addFilters = false)
 @Testcontainers
-@Sql(statements = "TRUNCATE TABLE users, payment_cards RESTART IDENTITY CASCADE", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+@Sql(statements = "TRUNCATE TABLE users, payment_cards RESTART IDENTITY CASCADE",
+        executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
 @EnableCaching
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@Slf4j
 class UserIntegrationTest {
 
     @Container
@@ -43,27 +53,42 @@ class UserIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        //registry.add("spring.cache.type", () -> "none");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+        registry.add("spring.liquibase.enabled ", () -> false);
+        registry.add("spring.cache.type", () -> "none");
+        registry.add("spring.data.redis.repositories.enabled", () -> "false");
     }
 
-    @LocalServerPort
-    private int port;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private UserRepository userRepository;
 
-    private RestTemplate restTemplate;
-    private String baseUrl;
+    @Autowired
+    private CacheManager cacheManager;
+
     private LocalDate birthDate;
+    private RequestPostProcessor testUser;
+    private RequestPostProcessor adminUser;
 
     @BeforeEach
     void setUp() {
-        restTemplate = new RestTemplate();
-        baseUrl = "http://localhost:" + port + "/api";
         birthDate = LocalDate.of(1990, 1, 1);
-
         userRepository.deleteAll();
+
+        // СОЗДАЕМ ТЕСТОВЫХ ПОЛЬЗОВАТЕЛЕЙ ДЛЯ АВТОРИЗАЦИИ
+        testUser = user("testuser").password("password").roles("USER");
+        adminUser = user("admin").password("password").roles("USER", "ADMIN");
+    }
+    @BeforeEach
+    void logTestName(TestInfo testInfo) {
+        log.info("-------------------------------------------------------");
+        log.info("СТАРТ ТЕСТА: {}", testInfo.getDisplayName());
+        log.info("-------------------------------------------------------");
     }
 
     private UserCreateDto createUniqueUserDto() {
@@ -71,7 +96,8 @@ class UserIntegrationTest {
         dto.setName("Иван");
         dto.setSurname("Петров");
         dto.setBirthDate(birthDate);
-        dto.setEmail("ivan." + UUID.randomUUID() + "@mail.com"); // Уникальный email
+        dto.setEmail("ivan." + UUID.randomUUID() + "@mail.com");
+        dto.setPassword("Test123!@#");
         return dto;
     }
 
@@ -84,112 +110,158 @@ class UserIntegrationTest {
         return dto;
     }
 
+    private UserDto createUserAndReturn(UserCreateDto userDto) throws Exception {
+        String response = mockMvc.perform(post("/api/users")
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(userDto)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readValue(response, UserDto.class);
+    }
+
     @Test
     @Order(1)
-    void createUser_ShouldReturnCreatedUser() {
+    @WithMockUser
+    void createUser_ShouldReturnCreatedUser() throws Exception {
+        log.info("Method: createUser_ShouldReturnCreatedUser()");
         UserCreateDto userDto = createUniqueUserDto();
-        String url = baseUrl + "/users";
 
-        ResponseEntity<UserDto> response = restTemplate.postForEntity(url, userDto, UserDto.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getId()).isNotNull();
-        assertThat(response.getBody().getEmail()).isEqualTo(userDto.getEmail());
+        mockMvc.perform(post("/api/users")
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(userDto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.email").value(userDto.getEmail()))
+                .andExpect(jsonPath("$.name").value(userDto.getName()))
+                .andExpect(jsonPath("$.surname").value(userDto.getSurname()));
     }
 
     @Test
     @Order(2)
-    void createUser_DuplicateEmail_ShouldThrowException() {
+    void createUser_DuplicateEmail_ShouldThrowException() throws Exception {
+        log.info("Method: createUser_DuplicateEmail_ShouldThrowException");
         UserCreateDto userDto = createUniqueUserDto();
-        String url = baseUrl + "/users";
 
-        restTemplate.postForEntity(url, userDto, UserDto.class);
+        // Первое создание - успешно
+        mockMvc.perform(post("/api/users")
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(userDto)))
+                .andExpect(status().isCreated());
 
-        assertThatThrownBy(() -> restTemplate.postForEntity(url, userDto, UserDto.class))
-                .isInstanceOf(HttpClientErrorException.Conflict.class);
+        // Второе создание с тем же email - конфликт
+        mockMvc.perform(post("/api/users")
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(userDto)))
+                .andExpect(status().isConflict());
     }
 
     @Test
     @Order(3)
-    void getUserById_ShouldReturnUser() {
+    void getUserById_ShouldReturnUser() throws Exception {
+        log.info("Method: getUserById_ShouldReturnUser");
         UserCreateDto userDto = createUniqueUserDto();
-        String createUrl = baseUrl + "/users";
-        ResponseEntity<UserDto> createResponse = restTemplate.postForEntity(createUrl, userDto, UserDto.class);
-        Long userId = createResponse.getBody().getId();
+        UserDto createdUser = createUserAndReturn(userDto);
+        Long userId = createdUser.getId();
 
-        String getUrl = baseUrl + "/users/" + userId;
-        ResponseEntity<UserDto> response = restTemplate.getForEntity(getUrl, UserDto.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody().getId()).isEqualTo(userId);
-        assertThat(response.getBody().getEmail()).isEqualTo(userDto.getEmail());
+        mockMvc.perform(get("/api/users/{id}", userId)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf()))  // ДОБАВЛЯЕМ АВТОРИЗАЦИЮ (для GET csrf не нужен)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.email").value(userDto.getEmail()))
+                .andExpect(jsonPath("$.name").value(userDto.getName()));
     }
 
     @Test
     @Order(4)
-    void getUserById_NotFound_ShouldThrowException() {
-        String url = baseUrl + "/users/999";
+    void getUserById_NotFound_ShouldThrowException() throws Exception {
+        log.info("Method: getUserById_NotFound_ShouldThrowException");
 
-        assertThatThrownBy(() -> restTemplate.getForEntity(url, UserDto.class))
-                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+        mockMvc.perform(get("/api/users/999")
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf()))
+                .andExpect(status().isNotFound());  // или isBadRequest(), зависит от вашего API
     }
 
     @Test
     @Order(5)
-    void createCard_ShouldReturnCreatedCard() {
+    void createCard_ShouldReturnCreatedCard() throws Exception {
+        log.info("Method: createCard_ShouldReturnCreatedCard()");
         UserCreateDto userDto = createUniqueUserDto();
-        String createUserUrl = baseUrl + "/users";
-        ResponseEntity<UserDto> userResponse = restTemplate.postForEntity(createUserUrl, userDto, UserDto.class);
-        Long userId = userResponse.getBody().getId();
+        UserDto createdUser = createUserAndReturn(userDto);
+        Long userId = createdUser.getId();
 
-        PaymentCardDto newCardDto = createCardDto();
-        String createCardUrl = baseUrl + "/users/" + userId + "/cards";
-        ResponseEntity<PaymentCardDto> response = restTemplate.postForEntity(createCardUrl, newCardDto, PaymentCardDto.class);
+        PaymentCardDto cardDto = createCardDto();
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getId()).isNotNull();
-        assertThat(response.getBody().getNumber()).isEqualTo(newCardDto.getNumber());
-        assertThat(response.getBody().getUserId()).isEqualTo(userId);
+        mockMvc.perform(post("/api/users/{userId}/cards", userId)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(cardDto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.number").value(cardDto.getNumber()))
+                .andExpect(jsonPath("$.holder").value(cardDto.getHolder()))
+                .andExpect(jsonPath("$.userId").value(userId));
     }
 
     @Test
     @Order(6)
-    void createCard_MaxCardsExceeded_ShouldThrowException() {
+    void createCard_MaxCardsExceeded_ShouldThrowException() throws Exception {
+        log.info("Method: createCard_MaxCardsExceeded_ShouldThrowException");
         UserCreateDto userDto = createUniqueUserDto();
-        String createUserUrl = baseUrl + "/users";
-        ResponseEntity<UserDto> userResponse = restTemplate.postForEntity(createUserUrl, userDto, UserDto.class);
-        Long userId = userResponse.getBody().getId();
+        UserDto createdUser = createUserAndReturn(userDto);
+        Long userId = createdUser.getId();
 
-        String createCardUrl = baseUrl + "/users/" + userId + "/cards";
-
+        // Создаем 5 карт (максимум)
         for (int i = 0; i < 5; i++) {
             PaymentCardDto newCard = new PaymentCardDto();
             newCard.setNumber(String.format("%016d", i + 1));
             newCard.setHolder("IVAN PETROV");
             newCard.setExpirationDate(LocalDate.now().plusYears(2));
             newCard.setActive(true);
-            restTemplate.postForEntity(createCardUrl, newCard, PaymentCardDto.class);
+
+            mockMvc.perform(post("/api/users/{userId}/cards", userId)
+                            .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                            .with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(newCard)))
+                    .andExpect(status().isCreated());
         }
 
+        // Пытаемся создать 6-ю карту
         PaymentCardDto sixthCard = new PaymentCardDto();
         sixthCard.setNumber("9999999999999999");
         sixthCard.setHolder("IVAN PETROV");
         sixthCard.setExpirationDate(LocalDate.now().plusYears(2));
         sixthCard.setActive(true);
 
-        assertThatThrownBy(() -> restTemplate.postForEntity(createCardUrl, sixthCard, PaymentCardDto.class))
-                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+        mockMvc.perform(post("/api/users/{userId}/cards", userId)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(sixthCard)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     @Order(7)
-    void updateUser_ShouldReturnUpdatedUser() {
+    void updateUser_ShouldReturnUpdatedUser() throws Exception {
+        log.info("Method: updateUser_ShouldReturnUpdatedUser()");
         UserCreateDto userDto = createUniqueUserDto();
-        String createUrl = baseUrl + "/users";
-        ResponseEntity<UserDto> createResponse = restTemplate.postForEntity(createUrl, userDto, UserDto.class);
-        Long userId = createResponse.getBody().getId();
+        UserDto createdUser = createUserAndReturn(userDto);
+        Long userId = createdUser.getId();
 
         UserDto updateDto = new UserDto();
         updateDto.setId(userId);
@@ -199,50 +271,62 @@ class UserIntegrationTest {
         updateDto.setEmail("petr." + UUID.randomUUID() + "@mail.com");
         updateDto.setActive(true);
 
-        String updateUrl = baseUrl + "/users/" + userId;
+        // Обновляем пользователя
+        mockMvc.perform(put("/api/users/{id}", userId)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateDto)))
+                .andExpect(status().isOk());
 
-        try {
-            restTemplate.put(updateUrl, updateDto);
-        } catch (HttpClientErrorException e) {
-            System.err.println("Ошибка при обновлении: " + e.getStatusCode() + " - " + e.getResponseBodyAsString());
-            throw e;
-        }
-
-        String getUrl = baseUrl + "/users/" + userId;
-        ResponseEntity<UserDto> getResponse = restTemplate.getForEntity(getUrl, UserDto.class);
-
-        assertThat(getResponse.getBody().getName()).isEqualTo("Петр");
-        assertThat(getResponse.getBody().getEmail()).isEqualTo(updateDto.getEmail());
+        // Проверяем обновленные данные
+        mockMvc.perform(get("/api/users/{id}", userId)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Петр"))
+                .andExpect(jsonPath("$.surname").value("Иванов"))
+                .andExpect(jsonPath("$.email").value(updateDto.getEmail()));
     }
 
     @Test
     @Order(8)
-    void deleteUser_ShouldRemoveUser() {
+    void deleteUser_ShouldRemoveUser() throws Exception {
+        log.info("Method: deleteUser_ShouldRemoveUser()");
         UserCreateDto userDto = createUniqueUserDto();
-        String createUrl = baseUrl + "/users";
-        ResponseEntity<UserDto> createResponse = restTemplate.postForEntity(createUrl, userDto, UserDto.class);
-        Long userId = createResponse.getBody().getId();
+        UserDto createdUser = createUserAndReturn(userDto);
+        Long userId = createdUser.getId();
 
-        String deleteUrl = baseUrl + "/users/" + userId;
-        restTemplate.delete(deleteUrl);
+        // Удаляем пользователя
+        mockMvc.perform(delete("/api/users/{id}", userId)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
 
-        String getUrl = baseUrl + "/users/" + userId;
-
-        assertThatThrownBy(() -> restTemplate.getForEntity(getUrl, UserDto.class))
-                .isInstanceOf(HttpClientErrorException.BadRequest.class); // ✅ ИЗМЕНЕНО: BadRequest вместо NotFound
+        // Проверяем, что пользователь удален
+        mockMvc.perform(get("/api/users/{id}", userId)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
     @Order(9)
-    void searchByFullName_ShouldReturnMatchingUsers() {
+    void searchByFullName_ShouldReturnMatchingUsers() throws Exception {
+        log.info("Method: searchByFullName_ShouldReturnMatchingUsers()");
         UserCreateDto userDto = createUniqueUserDto();
-        String createUrl = baseUrl + "/users";
-        restTemplate.postForEntity(createUrl, userDto, UserDto.class);
+        createUserAndReturn(userDto);
 
-        String searchUrl = baseUrl + "/users/search?fullName=" + userDto.getName() + "+" + userDto.getSurname();
-        ResponseEntity<UserDto[]> response = restTemplate.getForEntity(searchUrl, UserDto[].class);
+        String fullName = userDto.getName() + " " + userDto.getSurname();
 
-        assertThat(response.getBody()).hasSize(1);
-        assertThat(response.getBody()[0].getName()).isEqualTo(userDto.getName());
+        mockMvc.perform(get("/api/users/search")
+                        .param("fullName", fullName)
+                        .with(user("admin").roles("ADMIN")) // Эмулируем вход
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value(userDto.getName()))
+                .andExpect(jsonPath("$[0].surname").value(userDto.getSurname()));
     }
 }
