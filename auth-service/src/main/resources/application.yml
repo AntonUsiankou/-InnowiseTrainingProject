@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: auth-service
+  user:
+    service:
+      url: ${http://localhost:8082}
+  datasource:
+    url: jdbc:postgresql://localhost:5439/auth_db
+    username: auth
+    password: auth
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+
+server:
+  port: 8083
+
+jwt:
+  secret: ${JWT_SECRET:zP8vR2wX5mN9qK1sB4jL7hV0dC3fA6yT9uI1oP4kG7sJ2mN5bV8cX0zQ3wE6rT9}
+  access:
+    expiration: 900000
+  refresh:
+    expiration: 604800000
+
+logging:
+  level:
+    com.ausiankou: DEBUG
+    org.hibernate.SQL: DEBUG

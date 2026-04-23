@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1
+      author: order-service
+      changes:
+        - sqlFile:
+            path: db/changelog/changes/v1-create-order-tables.sql
+            splitStatements: true
+            stripComments: true

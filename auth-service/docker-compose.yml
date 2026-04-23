@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: auth-postgres
+    ports:
+      - "5439:5432"
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: auth
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:7-alpine
+    container_name: auth-redis
+    ports:
+      - "6380:6379" # Внешний порт 6380 (как в твоем конфиге), внутренний стандартный 6379
+    volumes:
+      - auth_redis_data:/data
+    networks:
+      - auth-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  auth_postgres_data:
+  auth_redis_data:
+
+networks:
+  auth-network:
+    driver: bridge
