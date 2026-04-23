@@ -34,6 +34,7 @@
     <modules>
         <module>user-service</module>
         <module>auth-service</module>
+        <module>orders-service</module>
     </modules>
 
     <dependencyManagement>
