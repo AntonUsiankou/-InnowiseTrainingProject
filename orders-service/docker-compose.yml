@@ -1,0 +1,23 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  order-db:
+    image: postgres:15-alpine
+    container_name: order-db
+    environment:
+      POSTGRES_DB: order-db
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: order
+    ports:
+      - "5440:5432"  # Используем 5440 (5438,5439 заняты)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U order -d order"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -1,0 +1,26 @@
+# src/main/resources/application.yml
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5440/order}
+    username: ${DB_USERNAME:order}
+    password: ${DB_PASSWORD:order}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+server:
+  port: ${PORT:8085}
+
+logging:
+  level:
+    com.ausiankou: DEBUG
