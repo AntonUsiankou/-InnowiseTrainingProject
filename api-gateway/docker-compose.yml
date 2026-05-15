@@ -1,0 +1,172 @@
+version: '3.8'
+
+networks:
+  microservices-net:
+    driver: bridge
+
+services:
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    networks:
+      - microservices-net
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Databases
+  auth-db:
+    image: postgres:15-alpine
+    container_name: auth-db
+    environment:
+      POSTGRES_DB: authdb
+      POSTGRES_USER: authuser
+      POSTGRES_PASSWORD: authpass
+    networks:
+      - microservices-net
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authuser"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  user-db:
+    image: postgres:15-alpine
+    container_name: user-db
+    environment:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: useruser
+      POSTGRES_PASSWORD: userpass
+    networks:
+      - microservices-net
+    ports:
+      - "5433:5432"
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U useruser"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  order-db:
+    image: postgres:15-alpine
+    container_name: order-db
+    environment:
+      POSTGRES_DB: orderdb
+      POSTGRES_USER: orderuser
+      POSTGRES_PASSWORD: orderpass
+    networks:
+      - microservices-net
+    ports:
+      - "5434:5432"
+    volumes:
+      - order-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orderuser"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Auth Service
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/authdb
+      SPRING_DATASOURCE_USERNAME: authuser
+      SPRING_DATASOURCE_PASSWORD: authpass
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      USER_SERVICE_URL: http://user-service:8082
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - microservices-net
+    ports:
+      - "8081:8081"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # User Service
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://user-db:5432/userdb
+      SPRING_DATASOURCE_USERNAME: useruser
+      SPRING_DATASOURCE_PASSWORD: userpass
+    networks:
+      - microservices-net
+    ports:
+      - "8082:8082"
+    depends_on:
+      user-db:
+        condition: service_healthy
+
+  # Order Service
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://order-db:5432/orderdb
+      SPRING_DATASOURCE_USERNAME: orderuser
+      SPRING_DATASOURCE_PASSWORD: orderpass
+    networks:
+      - microservices-net
+    ports:
+      - "8083:8083"
+    depends_on:
+      order-db:
+        condition: service_healthy
+
+  # API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    networks:
+      - microservices-net
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - user-service
+      - order-service
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  auth-db-data:
+  user-db-data:
+  order-db-data:
+  redis-data:
