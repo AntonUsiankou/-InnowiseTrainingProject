@@ -7,12 +7,10 @@ import lombok.NoArgsConstructor;
 
 @Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class ValidateTokenResponse {
     private boolean valid;
+    private String message;
     private Long userId;
     private String email;
     private String role;
-    private String message;
 }
