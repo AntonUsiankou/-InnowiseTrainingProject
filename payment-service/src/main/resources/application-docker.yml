@@ -1,0 +1,18 @@
+spring:
+  mongodb:
+    host: mongodb
+    port: 27017
+    database: payment_db
+    username: payment
+    password: payment
+
+  kafka:
+    bootstrap-servers: kafka:9092
+
+external:
+  api:
+    random-number:
+      url: https://www.random.org/integers/?num=1&min=1&max=100&col=1&base=10&format=plain&rnd=new
+
+server:
+  port: 8084

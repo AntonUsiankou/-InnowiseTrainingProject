@@ -2,8 +2,8 @@ package com.ausiankou.controller;
 
 import com.ausiankou.dto.CreateOrderRequest;
 import com.ausiankou.dto.OrderResponse;
-import com.ausiankou.dto.OrderStatusResponse;
 import com.ausiankou.dto.UpdateOrderRequest;
+import com.ausiankou.entity.OrderStatus;
 import com.ausiankou.service.OrderServiceImpl;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +67,7 @@ public class OrderController {
     public ResponseEntity<Page<OrderResponse>> getOrders(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-            @RequestParam(required = false) List<OrderStatusResponse> statuses,
+            @RequestParam(required = false) List<OrderStatus> statuses,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
         Page<OrderResponse> orders = orderService.getOrdersWithFilters(fromDate, toDate, statuses, pageable);
