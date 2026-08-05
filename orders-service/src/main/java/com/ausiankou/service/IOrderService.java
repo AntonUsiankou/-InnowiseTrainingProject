@@ -6,6 +6,7 @@ import com.ausiankou.dto.OrderStatusResponse;
 import com.ausiankou.dto.UpdateOrderRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -47,6 +48,14 @@ public interface IOrderService {
             LocalDateTime toDate,
             List<OrderStatusResponse> statuses,
             Pageable pageable);
+
+    @Transactional(readOnly = true)
+    Page<OrderResponse> getOrdersWithFilters(
+            LocalDateTime fromDate,
+            LocalDateTime toDate,
+            List<OrderStatusResponse> statuses,
+            Pageable pageable);
+
     /**
      * Возвращает все заказы конкретного пользователя.
      *

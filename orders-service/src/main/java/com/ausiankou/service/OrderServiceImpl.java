@@ -11,7 +11,6 @@ import com.ausiankou.repository.ItemRepository;
 import com.ausiankou.repository.OrderItemRepository;
 import com.ausiankou.repository.OrderRepository;
 import com.ausiankou.repository.specification.OrderSpecification;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.annotation.Transactional;
@@ -298,5 +297,21 @@ public class OrderServiceImpl implements IOrderService{
                 }
             });
         }
+    }
+
+    @Transactional
+    public void updateOrderStatusFromPayment(Long orderId, boolean paymentSuccess) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
+
+        if (paymentSuccess) {
+            order.setStatus(OrderStatus.PAID);
+            log.info("Order {} status updated to PAID", orderId);
+        } else {
+            order.setStatus(OrderStatus.PAYMENT_FAILED);
+            log.info("Order {} status updated to PAYMENT_FAILED", orderId);
+        }
+
+        orderRepository.save(order);
     }
 }

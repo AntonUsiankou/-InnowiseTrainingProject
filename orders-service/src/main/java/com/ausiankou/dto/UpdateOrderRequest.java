@@ -1,5 +1,6 @@
 package com.ausiankou.dto;
 
+import com.ausiankou.entity.OrderStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

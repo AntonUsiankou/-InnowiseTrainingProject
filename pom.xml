@@ -36,6 +36,7 @@
         <module>auth-service</module>
         <module>orders-service</module>
         <module>api-gateway</module>
+        <module>payment-service</module>
     </modules>
 
     <dependencyManagement>
