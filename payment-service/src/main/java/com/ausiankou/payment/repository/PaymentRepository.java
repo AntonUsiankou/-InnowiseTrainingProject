@@ -1,35 +1,23 @@
 package com.ausiankou.payment.repository;
 
 import com.ausiankou.payment.entity.Payment;
+import com.ausiankou.payment.entity.PaymentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
-import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+import java.util.UUID;
 
-@Repository
-public interface PaymentRepository extends MongoRepository<Payment, String> {
+public interface PaymentRepository extends MongoRepository<Payment, UUID> {
 
-    Page<Payment> findByUserId(Long userId, Pageable pageable);
+    Page<Payment> findAllByUserId(UUID userId, Pageable pageable);
 
-    Optional<Payment> findByOrderId(Long orderId);
+    Page<Payment> findAllByOrderId(UUID orderId, Pageable pageable);
 
-    Page<Payment> findByStatus(String status, Pageable pageable);
+    Page<Payment> findAllByStatus(PaymentStatus status, Pageable pageable);
 
-    List<Payment> findByUserIdAndTimestampBetween(Long userId, LocalDateTime from, LocalDateTime to);
+    List<Payment> findAllByUserIdAndTimestampBetween(UUID userId, java.time.Instant from, java.time.Instant to);
 
-    List<Payment> findByTimestampBetween(LocalDateTime from, LocalDateTime to);
-
-    @Query("{ $or: [ " +
-            "{ 'user_id': ?0 }, " +
-            "{ 'order_id': ?1 }, " +
-            "{ 'status': ?2 } " +
-            "] }")
-    Page<Payment> findByUserIdOrOrderIdOrStatus(Long userId, Long orderId, String status, Pageable pageable);
-
-    long countByStatus(String status);
+    List<Payment> findAllByTimestampBetween(java.time.Instant from, java.time.Instant to);
 }

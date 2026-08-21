@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: microservices
+data:
+  SPRING_PROFILES_ACTIVE: "docker"
+  AUTH_SERVICE_URL: "http://auth-service:8081"
+  USER_SERVICE_URL: "http://user-service:8082"
+  ORDER_SERVICE_URL: "http://order-service:8083"
+  PAYMENT_SERVICE_URL: "http://payment-service:8084"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  EXTERNAL_RANDOM_API_URL: "https://www.random.org"

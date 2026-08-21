@@ -1,56 +1,51 @@
 spring:
   application:
     name: auth-service
-  user:
-    service:
-      url: http://localhost:8082
-
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5439/auth_db}
-    username: ${DB_USERNAME:auth}
-    password: ${DB_PASSWORD:auth}
-    driver-class-name: org.postgresql.Driver
-
-    data:
-      redis:
-        host: ${REDIS_HOST:localhost}
-        port: ${REDIS_PORT:6379}  # Исправлено:統一 порт
-        password: ${REDIS_PASSWORD:}
-        timeout: 2000ms
-        lettuce:
-          pool:
-            max-active: 8
-            max-idle: 8
-            min-idle: 0
-
+    url: jdbc:postgresql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT:5432}/${AUTH_DB_NAME:auth_db}
+    username: ${AUTH_DB_USER:auth_user}
+    password: ${AUTH_DB_PASSWORD:auth_pass}
+    hikari:
+      # sized for a few thousand concurrent users hitting a stateless service;
+      # tune against actual DB max_connections in production
+      maximum-pool-size: ${AUTH_DB_POOL_SIZE:20}
+      minimum-idle: 5
+      connection-timeout: 3000
   jpa:
     hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
-    show-sql: true
-
-server:
-  port: ${PORT:8083}
+      ddl-auto: validate
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
 
 jwt:
-  secret: ${JWT_SECRET:zP8vR2wX5mN9qK1sB4jL7hV0dC3fA6yT9uI1oP4kG7sJ2mN5bV8cX0zQ3wE6rT9}
-  access:
-    expiration: 900000  # 15 минут
-  refresh:
-    expiration: 604800000  # 7 дней
+  secret: ${JWT_SECRET:change-this-to-a-long-random-secret-min-32-bytes-please}
+  access-ttl-ms: ${JWT_ACCESS_TTL_MS:900000}
+  refresh-ttl-ms: ${JWT_REFRESH_TTL_MS:604800000}
 
-logging:
-  level:
-    com.ausiankou.auth: DEBUG
-    org.springframework.security: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+server:
+  port: ${SERVER_PORT:8081}
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  level:
+    com.example.auth: INFO

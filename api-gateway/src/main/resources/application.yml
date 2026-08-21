@@ -1,112 +1,244 @@
-server:
-  port: 8080
-  compression:
-    enabled: true
-
 spring:
   application:
     name: api-gateway
-
-  cloud:
-    gateway:
-      routes:
-        - id: auth-service
-          uri: ${AUTH_SERVICE_URL:http://localhost:8083}
-          predicates:
-            - Path=/api/auth/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: authService
-                fallbackUri: forward:/fallback/auth
-            - name: Retry
-              args:
-                retries: 3
-                statuses: SERVICE_UNAVAILABLE, INTERNAL_SERVER_ERROR
-                methods: GET,POST,PUT,DELETE
-
-        - id: user-service
-          uri: ${USER_SERVICE_URL:http://localhost:8082}
-          predicates:
-            - Path=/api/users/**, /api/cards/**, /api/internal/auth/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: userService
-                fallbackUri: forward:/fallback/user
-            - name: Retry
-              args:
-                retries: 3
-                statuses: SERVICE_UNAVAILABLE
-
-        - id: order-service
-          uri: ${ORDER_SERVICE_URL:http://localhost:8085}
-          predicates:
-            - Path=/api/orders/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: orderService
-                fallbackUri: forward:/fallback/order
-            - name: Retry
-              args:
-                retries: 3
-                statuses: SERVICE_UNAVAILABLE
-
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "*"
-            allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - PATCH
-              - DELETE
-              - OPTIONS
-            allowedHeaders: "*"
-            exposedHeaders:
-              - Authorization
-              - X-User-Id
-              - X-User-Email
-            allowCredentials: false
-
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
-        - AddResponseHeader=X-Response-Time, %{response.time}
 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      timeout: 5000ms
-      lettuce:
+
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 5s
         pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
+          type: elastic
+          max-idle-time: 30s
+      default-filters:
+        # basic protection against a client hammering the gateway; sized
+        # generously since thousands of *distinct* users are expected
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 100
+            redis-rate-limiter.burstCapacity: 200
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@ipKeyResolver}"
+
+      routes:
+        # ---------------- AUTH SERVICE ----------------
+        - id: auth-service-read
+          uri: ${services.auth-service.base-url}
+          predicates:
+            - Path=/auth/**
+            - Method=GET
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authServiceCB
+                fallbackUri: forward:/fallback/auth-service
+            - name: Retry
+              args:
+                retries: 3
+                series: SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+                  factor: 2
+                  basedOnPreviousValue: false
+
+        - id: auth-service-write
+          uri: ${services.auth-service.base-url}
+          predicates:
+            - Path=/auth/**
+          filters:
+            # Login/token issuance is not idempotent-safe to blindly retry
+            # (avoid double-submitting credentials), so writes only get the
+            # circuit breaker, not automatic retry.
+            - name: CircuitBreaker
+              args:
+                name: authServiceCB
+                fallbackUri: forward:/fallback/auth-service
+
+        # ---------------- USER SERVICE ----------------
+        - id: user-service-read
+          uri: ${services.user-service.base-url}
+          predicates:
+            - Path=/users/**
+            - Method=GET
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: userServiceCB
+                fallbackUri: forward:/fallback/user-service
+            - name: Retry
+              args:
+                retries: 3
+                series: SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+                  factor: 2
+                  basedOnPreviousValue: false
+
+        - id: user-service-write
+          uri: ${services.user-service.base-url}
+          predicates:
+            - Path=/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: userServiceCB
+                fallbackUri: forward:/fallback/user-service
+
+        # ---------------- ORDER SERVICE ----------------
+        - id: order-service-read
+          uri: ${services.order-service.base-url}
+          predicates:
+            - Path=/orders/**
+            - Method=GET
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: orderServiceCB
+                fallbackUri: forward:/fallback/order-service
+            - name: Retry
+              args:
+                retries: 3
+                series: SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+                  factor: 2
+                  basedOnPreviousValue: false
+
+        - id: order-service-write
+          uri: ${services.order-service.base-url}
+          predicates:
+            - Path=/orders/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: orderServiceCB
+                fallbackUri: forward:/fallback/order-service
+
+        # ---------------- PAYMENT SERVICE ----------------
+        - id: payment-service-read
+          uri: ${services.payment-service.base-url}
+          predicates:
+            - Path=/payments/**
+            - Method=GET
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: paymentServiceCB
+                fallbackUri: forward:/fallback/payment-service
+            - name: Retry
+              args:
+                retries: 3
+                series: SERVER_ERROR
+                methods: GET
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+                  factor: 2
+                  basedOnPreviousValue: false
+
+        - id: payment-service-write
+          uri: ${services.payment-service.base-url}
+          predicates:
+            - Path=/payments/**
+          filters:
+            # Payment creation must NEVER be blindly retried by the gateway -
+            # a retried POST could create a duplicate charge/payment record.
+            # Only the circuit breaker applies here; idempotency for genuine
+            # client-side retries should be handled with an idempotency key
+            # at the Payment Service level if needed.
+            - name: CircuitBreaker
+              args:
+                name: paymentServiceCB
+                fallbackUri: forward:/fallback/payment-service
 
 jwt:
-  secret: ${JWT_SECRET:zP8vR2wX5mN9qK1sB4jL7hV0dC3fA6yT9uI1oP4kG7sJ2mN5bV8cX0zQ3wE6rT9}
-  expiration: 900000
+  secret: ${JWT_SECRET:change-this-to-a-long-random-secret-min-32-bytes-please}
 
-logging:
-  level:
-    com.ausiankou.gateway: DEBUG
-    org.springframework.cloud.gateway: INFO
-    org.springframework.security: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+services:
+  auth-service:
+    base-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+  user-service:
+    base-url: ${USER_SERVICE_URL:http://localhost:8082}
+  order-service:
+    base-url: ${ORDER_SERVICE_URL:http://localhost:8083}
+  payment-service:
+    base-url: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+
+server:
+  port: ${SERVER_PORT:8080}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,gateway
-      base-path: /actuator
+        include: health,info,prometheus,circuitbreakers,retries,gateway
   endpoint:
-    gateway:
-      enabled: true
     health:
+      probes:
+        enabled: true
       show-details: always
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    circuitbreakers:
+      enabled: true
+
+# --- Resilience4j: one circuit breaker + retry pair per downstream service ---
+# Same tuning rationale as Order Service's client: count-based sliding window,
+# don't trip on too few samples, half-open probing before fully closing again.
+# The TimeLimiter bounds how long we wait on a reactive call before treating
+# it as a failure for circuit-breaking purposes.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 3s
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      authServiceCB:
+        base-config: default
+      userServiceCB:
+        base-config: default
+      orderServiceCB:
+        base-config: default
+      paymentServiceCB:
+        base-config: default
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 4s
+        cancel-running-future: true
+    instances:
+      authServiceCB:
+        base-config: default
+      userServiceCB:
+        base-config: default
+      orderServiceCB:
+        base-config: default
+      paymentServiceCB:
+        base-config: default
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO

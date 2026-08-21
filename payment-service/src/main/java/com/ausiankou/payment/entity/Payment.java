@@ -1,41 +1,39 @@
 package com.ausiankou.payment.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.UUID;
 
 @Document(collection = "payments")
-@Data
-@Builder
+@CompoundIndex(name = "idx_order_user", def = "{'orderId': 1, 'userId': 1}")
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Payment {
 
     @Id
-    private String id;
+    private UUID id;
 
     @Indexed
-    @Field("order_id")
-    private Long orderId;
+    private UUID orderId;
 
     @Indexed
-    @Field("user_id")
-    private Long userId;
+    private UUID userId;
 
     @Indexed
-    @Field("status")
-    private String status;
+    private PaymentStatus status;
 
-    @Field("timestamp")
-    private LocalDateTime timestamp;
+    @CreatedDate
+    private Instant timestamp;
 
-    @Field("payment_amount")
     private BigDecimal paymentAmount;
 }

@@ -1,0 +1,51 @@
+databaseChangeLog:
+  # liquibase-mongodb extension: sets up indexes on the "payments" collection
+  # equivalent to what Spring Data @Indexed declares on the entity, so the
+  # collection is index-ready even before the app writes its first document.
+  - changeSet:
+      id: 1-create-payments-indexes
+      author: platform
+      changes:
+        - createIndex:
+            collectionName: payments
+            indexName: idx_payments_orderId
+            columns:
+              - column:
+                  name: orderId
+        - createIndex:
+            collectionName: payments
+            indexName: idx_payments_userId
+            columns:
+              - column:
+                  name: userId
+        - createIndex:
+            collectionName: payments
+            indexName: idx_payments_status
+            columns:
+              - column:
+                  name: status
+        - createIndex:
+            collectionName: payments
+            indexName: idx_payments_order_user
+            columns:
+              - column:
+                  name: orderId
+              - column:
+                  name: userId
+
+  - changeSet:
+      id: 2-create-outbox-indexes
+      author: platform
+      changes:
+        - createIndex:
+            collectionName: payment_outbox
+            indexName: idx_outbox_status
+            columns:
+              - column:
+                  name: status
+        - createIndex:
+            collectionName: payment_outbox
+            indexName: idx_outbox_created_at
+            columns:
+              - column:
+                  name: createdAt

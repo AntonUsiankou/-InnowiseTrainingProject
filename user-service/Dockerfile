@@ -1,14 +1,16 @@
+# --- build stage ---
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /build
+COPY pom.xml .
+RUN mvn -B dependency:go-offline
+COPY src ./src
+RUN mvn -B clean package -DskipTests
+
+# --- runtime stage ---
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-
-# Важно: JAR ищется относительно корня контекста (сейчас это корень проекта)
-COPY user-service/target/user-service-*.jar app.jar
-
-# RUN обязательно с новой строки
-RUN groupadd --system --gid 1001 spring && \
-    useradd --system --uid 1001 --gid 1001 spring && \
-    chown -R spring:spring /app
-
-USER spring:spring
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=docker"]
+RUN addgroup -S spring && adduser -S spring -G spring
+USER spring
+COPY --from=build /build/target/*.jar app.jar
+EXPOSE 8082
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]

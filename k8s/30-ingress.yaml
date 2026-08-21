@@ -1,0 +1,21 @@
+# Requires the ingress addon: `minikube addons enable ingress`
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: microservices-ingress
+  namespace: microservices
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: microservices.local   # add to /etc/hosts -> `minikube ip`
+      http:
+        paths:
+          - path: /(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: api-gateway   # Ingress only fronts the Gateway - it's
+                port:                # the single public entry point per the
+                  number: 8080       # architecture diagram

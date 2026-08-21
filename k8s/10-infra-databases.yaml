@@ -1,0 +1,221 @@
+# ---------------- Postgres: auth-db ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-db
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: auth-db }
+  template:
+    metadata:
+      labels: { app: auth-db }
+    spec:
+      containers:
+        - name: auth-db
+          image: postgres:16-alpine
+          ports: [{ containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_DB, value: auth_db }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: AUTH_DB_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: AUTH_DB_PASSWORD } }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "auth_user", "-d", "auth_db"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["pg_isready", "-U", "auth_user", "-d", "auth_db"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+      volumes:
+        - name: data
+          emptyDir: {}   # swap for a PVC in a real cluster
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-db
+  namespace: microservices
+spec:
+  selector: { app: auth-db }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+# ---------------- Postgres: user-db ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-db
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: user-db }
+  template:
+    metadata:
+      labels: { app: user-db }
+    spec:
+      containers:
+        - name: user-db
+          image: postgres:16-alpine
+          ports: [{ containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_DB, value: user_db }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: USER_DB_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: USER_DB_PASSWORD } }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "user_user", "-d", "user_db"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["pg_isready", "-U", "user_user", "-d", "user_db"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-db
+  namespace: microservices
+spec:
+  selector: { app: user-db }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+# ---------------- Postgres: order-db ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-db
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: order-db }
+  template:
+    metadata:
+      labels: { app: order-db }
+    spec:
+      containers:
+        - name: order-db
+          image: postgres:16-alpine
+          ports: [{ containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_DB, value: order_db }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: ORDER_DB_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: ORDER_DB_PASSWORD } }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "order_user", "-d", "order_db"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["pg_isready", "-U", "order_user", "-d", "order_db"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-db
+  namespace: microservices
+spec:
+  selector: { app: order-db }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+# ---------------- MongoDB: payment-db ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-db
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: payment-db }
+  template:
+    metadata:
+      labels: { app: payment-db }
+    spec:
+      containers:
+        - name: payment-db
+          image: mongo:7
+          # --replSet: required for multi-document transactions used by the
+          # payment outbox pattern (see payment-service's MongoTransactionConfig)
+          args: ["--replSet", "rs0", "--bind_ip_all"]
+          ports: [{ containerPort: 27017 }]
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom: { secretKeyRef: { name: app-secrets, key: PAYMENT_DB_USER } }
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: PAYMENT_DB_PASSWORD } }
+            - { name: MONGO_INITDB_DATABASE, value: payment_db }
+          readinessProbe:
+            exec: { command: ["mongosh", "--eval", "db.adminCommand('ping')"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec: { command: ["mongosh", "--eval", "db.adminCommand('ping')"] }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          volumeMounts:
+            - { name: data, mountPath: /data/db }
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-db
+  namespace: microservices
+spec:
+  selector: { app: payment-db }
+  ports: [{ port: 27017, targetPort: 27017 }]
+---
+# One-shot Job: initiates the single-node replica set. Re-running `kubectl
+# apply` re-creates this Job only if you delete it first (Jobs are
+# immutable); rs.initiate() on an already-initiated set errors harmlessly,
+# which this ignores.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: payment-db-init
+  namespace: microservices
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init-replica-set
+          image: mongo:7
+          env:
+            - name: PAYMENT_DB_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: PAYMENT_DB_USER } }
+            - name: PAYMENT_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: PAYMENT_DB_PASSWORD } }
+          command:
+            - mongosh
+            - --host=payment-db:27017
+            - -u=$(PAYMENT_DB_USER)
+            - -p=$(PAYMENT_DB_PASSWORD)
+            - --authenticationDatabase=admin
+            - --eval
+            - "try { rs.initiate({_id:'rs0',members:[{_id:0,host:'payment-db:27017'}]}) } catch (e) { print('replica set already initiated: ' + e) }"

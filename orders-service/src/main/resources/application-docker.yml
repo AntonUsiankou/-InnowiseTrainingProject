@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://order-db:5432/${ORDER_DB_NAME:order_db}
+  kafka:
+    bootstrap-servers: kafka:9092
+services:
+  user-service:
+    base-url: http://user-service:8082

@@ -1,150 +1,75 @@
-server:
-  port: 8084
-  tomcat:
-    threads:
-      max: 200
-      min-spare: 20
-    accept-count: 100
-    max-connections: 10000
-  connection-timeout: 20000
-
 spring:
   application:
     name: payment-service
-
   data:
     mongodb:
-      host: ${MONGO_HOST:localhost}
-      port: ${MONGO_PORT:27017}
-      database: ${MONGO_DB:payment_db}
-      username: ${MONGO_USER:payment}
-      password: ${MONGO_PASSWORD:payment}
-      authentication-database: admin
-      uri: mongodb://${MONGO_USER:payment}:${MONGO_PASSWORD:payment}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/${MONGO_DB:payment_db}?authSource=admin
-      auto-index-creation: true
-      connection-pool:
-        max-size: 100
-        min-size: 10
-        max-wait-time-ms: 5000
-        max-connection-life-time-ms: 600000
-        max-connection-idle-time-ms: 60000
-
+      uri: mongodb://${PAYMENT_DB_USER:payment_user}:${PAYMENT_DB_PASSWORD:payment_pass}@${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:27017}/${PAYMENT_DB_NAME:payment_db}?authSource=admin&replicaSet=rs0
+  liquibase:
+    enabled: ${LIQUIBASE_ENABLED:true}
+    change-log: classpath:db/changelog/db.changelog-master.yaml
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
       properties:
-        spring.json.type.mapping: payment:com.ausiankou.payment.dto.PaymentEvent
-        # Kafka Producer оптимизации
-        linger.ms: 10
-        batch.size: 16384
-        compression.type: snappy
-        acks: all
-        retries: 3
+        # prevents duplicate records on the broker if a retry is triggered
+        # after the original send actually succeeded (network blip on the ack)
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
-    consumer:
-      group-id: payment-service-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "*"
-        spring.json.type.mapping: payment:com.ausiankou.payment.dto.PaymentEvent
-        # Kafka Consumer оптимизации
-        fetch.min.bytes: 1024
-        fetch.max.wait.ms: 500
-        max.partition.fetch.bytes: 1048576
-        session.timeout.ms: 45000
-        heartbeat.interval.ms: 15000
-    listener:
-      concurrency: 3
-      ack-mode: BATCH
-      poll-timeout: 5000
 
-  cache:
-    cache-names: paymentStats, userPayments
-    caffeine:
-      spec: maximumSize=1000,expireAfterWrite=60s
+kafka:
+  topics:
+    create-payment: CREATE_PAYMENT
 
-  liquibase:
-    change-log: classpath:db/changelog/changelog-master.yaml
-    enabled: true
+jwt:
+  secret: ${JWT_SECRET:change-this-to-a-long-random-secret-min-32-bytes-please}
 
-# External API Configuration
-external:
-  api:
-    random-number:
-      url: ${RANDOM_API_URL:https://www.random.org/integers/}
-      timeout: 3000
-      max-attempts: 3
-      circuit-breaker:
-        enabled: true
-        failure-rate-threshold: 50
-        wait-duration-open: 10000
-        permitted-number-of-calls-half-open: 5
-        sliding-window-size: 10
+services:
+  external-random-api:
+    base-url: ${EXTERNAL_RANDOM_API_URL:https://www.random.org}
 
-# Resilience4j Configuration
-resilience4j:
-  circuitbreaker:
-    instances:
-      randomNumberApi:
-        register-health-indicator: true
-        sliding-window-size: 10
-        minimum-number-of-calls: 5
-        permitted-number-of-calls-in-half-open-state: 3
-        automatic-transition-from-open-to-half-open-enabled: true
-        wait-duration-in-open-state: 10s
-        failure-rate-threshold: 50
-        event-consumer-buffer-size: 10
-  retry:
-    instances:
-      randomNumberApi:
-        max-attempts: 3
-        wait-duration: 1s
-        retry-exceptions:
-          - java.net.SocketTimeoutException
-          - org.springframework.web.client.ResourceAccessException
-  bulkhead:
-    instances:
-      paymentCreation:
-        max-concurrent-calls: 50
-        max-wait-duration: 500ms
-  ratelimiter:
-    instances:
-      paymentApi:
-        limit-for-period: 1000
-        limit-refresh-period: 1s
-        timeout-duration: 100ms
+server:
+  port: ${SERVER_PORT:8084}
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
 
-# MongoDB оптимизации
-logging:
-  level:
-    com.ausiankou.payment: INFO
-    org.springframework.data.mongodb.core: WARN
-    org.mongodb.driver: WARN
-    org.springframework.kafka: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-
-# Actuator для мониторинга
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,retries
-      base-path: /actuator
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-    tags:
-      application: payment-service
+        include: health,info,prometheus,circuitbreakers,retries
   endpoint:
     health:
+      probes:
+        enabled: true
       show-details: always
-    metrics:
+  health:
+    livenessstate:
       enabled: true
-    prometheus:
+    readinessstate:
       enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      externalRandomApi:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+        wait-duration-in-open-state: 15s
+        permitted-number-of-calls-in-half-open-state: 5
+  retry:
+    instances:
+      externalRandomApi:
+        max-attempts: 3
+        wait-duration: 300ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2

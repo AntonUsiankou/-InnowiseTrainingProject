@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1-create-credentials-table
+      author: platform
+      changes:
+        - createTable:
+            tableName: credentials
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+              - column:
+                  name: login
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: password_hash
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: enabled
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: idx_credentials_login
+            tableName: credentials
+            unique: true
+            columns:
+              - column:
+                  name: login
+        - createIndex:
+            indexName: idx_credentials_user_id
+            tableName: credentials
+            columns:
+              - column:
+                  name: user_id

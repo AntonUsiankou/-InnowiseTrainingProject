@@ -1,26 +1,100 @@
-# src/main/resources/application.yml
 spring:
+  application:
+    name: order-service
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5440/order}
-    username: ${DB_USERNAME:order}
-    password: ${DB_PASSWORD:order}
-    driver-class-name: org.postgresql.Driver
-
+    url: jdbc:postgresql://${ORDER_DB_HOST:localhost}:${ORDER_DB_PORT:5432}/${ORDER_DB_NAME:order_db}
+    username: ${ORDER_DB_USER:order_user}
+    password: ${ORDER_DB_PASSWORD:order_pass}
+    hikari:
+      maximum-pool-size: ${ORDER_DB_POOL_SIZE:30}
+      minimum-idle: 10
+      connection-timeout: 3000
   jpa:
     hibernate:
       ddl-auto: validate
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: true
-
+    open-in-view: false
   liquibase:
-    enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: order-service
+      auto-offset-reset: earliest
+      # explicit ack after listener returns successfully; combined with
+      # DefaultErrorHandler below, a failing record is retried, then
+      # dead-lettered - never silently committed-and-lost.
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.example.order.kafka
+        spring.json.value.default.type: com.example.order.kafka.PaymentEvent
+    producer:
+      # used only to republish records to the .DLT topic on exhausted retries
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    listener:
+      ack-mode: RECORD
+
+kafka:
+  topics:
+    create-payment: CREATE_PAYMENT
+
+jwt:
+  secret: ${JWT_SECRET:change-this-to-a-long-random-secret-min-32-bytes-please}
+
+services:
+  user-service:
+    base-url: ${USER_SERVICE_URL:http://localhost:8082}
 
 server:
-  port: ${PORT:8085}
+  port: ${SERVER_PORT:8083}
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
 
-logging:
-  level:
-    com.ausiankou: DEBUG
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,circuitbreakers,retries
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    circuitbreakers:
+      enabled: true
+
+# --- Resilience4j: retry + circuit breaker for the Order -> User Service call ---
+resilience4j:
+  circuitbreaker:
+    instances:
+      userService:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20          # evaluate failure rate over the last 20 calls
+        minimum-number-of-calls: 10      # don't trip on too few samples
+        failure-rate-threshold: 50       # open if >=50% of calls fail
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 2s
+        wait-duration-in-open-state: 10s # stay open 10s before trying again
+        permitted-number-of-calls-in-half-open-state: 5
+        automatic-transition-from-open-to-half-open-enabled: true
+  retry:
+    instances:
+      userService:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
