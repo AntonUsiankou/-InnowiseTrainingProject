@@ -1,4 +1,4 @@
-package com.ausiankou.user.auth.integration;
+package com.ausiankou.user.integration;
 
 import com.ausiankou.user.dto.PaymentCardCreateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;

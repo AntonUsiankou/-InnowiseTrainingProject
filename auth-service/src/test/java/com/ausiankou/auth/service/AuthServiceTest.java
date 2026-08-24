@@ -1,8 +1,6 @@
 package com.ausiankou.auth.service;
 
 import com.ausiankou.auth.dto.*;
-import com.ausiankou.dto.*;
-import com.auth.dto.*;
 import com.ausiankou.auth.entity.Credential;
 import com.ausiankou.auth.entity.Role;
 import com.ausiankou.auth.exception.AuthException;

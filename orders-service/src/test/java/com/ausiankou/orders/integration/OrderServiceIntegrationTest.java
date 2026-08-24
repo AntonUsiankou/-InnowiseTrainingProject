@@ -1,4 +1,4 @@
-package com.ausiankou.orders.auth.ordersservice.integration;
+package com.ausiankou.orders.integration;
 
 import com.ausiankou.orders.dto.OrderCreateRequest;
 import com.ausiankou.orders.kafka.PaymentEvent;

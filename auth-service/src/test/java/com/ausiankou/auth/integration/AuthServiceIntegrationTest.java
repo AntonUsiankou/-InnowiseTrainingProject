@@ -1,4 +1,4 @@
-package com.ausiankou.auth.auth.integration;
+package com.ausiankou.auth.integration;
 
 import com.ausiankou.auth.dto.LoginRequest;
 import com.ausiankou.auth.dto.RegisterCredentialsRequest;

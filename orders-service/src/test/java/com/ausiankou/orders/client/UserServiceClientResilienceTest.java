@@ -1,6 +1,5 @@
-package com.ausiankou.orders.auth.ordersservice.client;
+package com.ausiankou.orders.client;
 
-import com.ausiankou.orders.client.UserServiceClient;
 import com.ausiankou.orders.config.RestClientConfig;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -41,7 +40,7 @@ class UserServiceClientResilienceTest {
             org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration.class,
             org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration.class
     })
-    @ComponentScan(basePackages = "com.ausiankou.client")
+    @ComponentScan(basePackages = "com.ausiankou.orders")
     @Import(RestClientConfig.class)
     static class TestApp {
     }

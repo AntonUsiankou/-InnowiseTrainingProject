@@ -1,4 +1,4 @@
-package com.ausiankou.orders.auth.ordersservice.service;
+package com.ausiankou.orders.service;
 
 import com.ausiankou.orders.client.UserServiceClient;
 import com.ausiankou.orders.dto.OrderCreateRequest;
