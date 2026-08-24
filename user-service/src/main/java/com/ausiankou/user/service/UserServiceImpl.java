@@ -1,8 +1,8 @@
 package com.ausiankou.user.service;
 
-import com.ausiankou.dto.*;
 import com.ausiankou.user.dto.*;
-import com.user.dto.*;
+import com.ausiankou.user.dto.*;
+import com.ausiankou.user.dto.*;
 import com.ausiankou.user.entity.PaymentCard;
 import com.ausiankou.user.entity.User;
 import com.ausiankou.user.exception.UserException;

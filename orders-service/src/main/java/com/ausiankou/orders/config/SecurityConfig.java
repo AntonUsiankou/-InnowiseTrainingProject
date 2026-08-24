@@ -1,25 +1,16 @@
-package com.ausiankou.user.config;
+package com.ausiankou.orders.config;
 
-import com.ausiankou.user.security.JwtAuthFilter;
+import com.ausiankou.orders.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.bind.annotation.RequestMethod;
 
-/**
- * Fine-grained authorization for User Service:
- * - ADMIN: full access to all endpoints
- * - USER: only its own resources (enforced additionally at method level via
- *   @PreAuthorize + ownership checks in the service layer, since URL patterns
- *   alone can't express "only my own id")
- */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -35,8 +26,6 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/users/**").hasRole("ADMIN")
-                        .requestMatchers("/users/**/activate", "/users/**/deactivate").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

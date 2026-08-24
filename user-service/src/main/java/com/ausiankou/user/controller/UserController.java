@@ -1,8 +1,6 @@
 package com.ausiankou.user.controller;
 
-import com.ausiankou.dto.*;
 import com.ausiankou.user.dto.*;
-import com.user.dto.*;
 import com.ausiankou.user.service.UserServiceImpl;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
